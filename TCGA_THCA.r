@@ -1,24 +1,42 @@
+#load the TCGAbiolinks library for use
 library(TCGAbiolinks)
 library(SummarizedExperiment)
+
+#get the data for all the project from GDC
 GDCprojects = getGDCprojects()
+
+#quick look at top data items
 head(GDCprojects[c("project_id", "name")])
+
+# getting the summary of data THCA(Thyroid carcinoma)
 getProjectSummary("TCGA-THCA")
+
+#specifing the data category from the summary projects 
 query_TCGA = GDCquery(
   project = "TCGA-THCA",
   data.category = "Transcriptome Profiling", # parameter enforced by GDCquery
   experimental.strategy = "RNA-Seq",
   workflow.type = "STAR - Counts", data.type = 'Gene Expression Quantification')
+
+#downloading the data of gdc query
 GDCdownload(query = query_TCGA)
+
+#get the cases of the downloaded samples
 samplesDown <- getResults(query_TCGA,cols=c("cases"))
+
+#  lets extract data of primary tumor
 dataSmTP <- TCGAquery_SampleTypes(
   barcode = samplesDown,
   typesample = "TP"
 )
+
+# lets extract data of normal tissue
 dataSmNT <- TCGAquery_SampleTypes(
   barcode = samplesDown,
   typesample = "NT"
 )
 
+# getting the query of the samples
 query.samples <- GDCquery(
   project = "TCGA-THCA", 
   data.category = "Transcriptome Profiling",
@@ -28,34 +46,41 @@ query.samples <- GDCquery(
   barcode = c(dataSmTP, dataSmNT)
 )
 
+#downloading the query sample
 GDCdownload(
   query = query.samples,
   directory = "C:/Downloads"
 )
 
+# preparing the data for the samples
 dataPrep <- GDCprepare(
   query = query.samples, 
   directory = "C:/Downloads"
 )
 
-
+# finding the corelation above 0.6 between the samples
 dataPrep_TCGA <- TCGAanalyze_Preprocessing(
   object = dataPrep, 
   cor.cut = 0.6,
   datatype = "unstranded"
 ) 
 
+# normalizing the GC content from the data
 library(EDASeq)
 dataNorm_TCGA <- TCGAanalyze_Normalization(
   tabDF = dataPrep_TCGA,
   geneInfo = geneInfoHT,
   method = "gcContent"
 )
+
+#filetering the data unsing a method called quantile
 dataFilt_TCGA <- TCGAanalyze_Filtering(
   tabDF = dataNorm_TCGA,
   method = "quantile", 
   qnt.cut =  0.25 # qnt.cut refers to quantile cutoff which 
 )
+
+# to analyse the sample data where the fdr and logfc cutoff are specified.
 library(edgeR)
 dataDEGs_TCGA <- TCGAanalyze_DEA(
   mat1 = dataFilt_TCGA[,dataSmNT],# read count data for one grp i.e primary tumor
@@ -66,6 +91,8 @@ dataDEGs_TCGA <- TCGAanalyze_DEA(
   logFC.cut = 1,
   method = "glmLRT"
 )  
+
+#to save the results
 write.csv(x = dataDEGs_TCGA, file = "C:/Users/dasar/OneDrive/Desktop/notes/sem2/minor project/r_script/results/sample_results2.csv")
 
 # conversion of ensembl id to genes
@@ -78,6 +105,8 @@ Genelist = mapIds(org.Hs.eg.db,
                   keytype="ENSEMBL",
                   multiVals="first")
 
+
+
 # pathway enrichment analysis
 thcaEA <- TCGAanalyze_EAcomplete(
   TFname = "DEA genes Normal Vs Tumor",
@@ -85,7 +114,7 @@ thcaEA <- TCGAanalyze_EAcomplete(
 )
 
 
-
+# to visualize the data
 TCGAvisualize_EAbarplot(
   tf = rownames(thcaEA$ResBP), 
   GOBPTab = thcaEA$ResBP,
